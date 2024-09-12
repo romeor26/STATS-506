@@ -1,0 +1,278 @@
+---
+title: "STATS 506 HW1"
+author: "Romeo Ruan"
+format: html
+---
+
+Problem 1
+
+Below, I have created a dataframe named "wine_data" that imports all information in wine.data and labeled its column names with wine_data, and I have added a Class column to identify which class is each wine belonging to. I have comfirmed that there are of 59 for the first class, 71 for the second, and 48 for the third, as reported in the wine.names.
+
+```{r}
+wine_data <- read.csv("/Users/yining/Downloads/wine/wine.data", header = FALSE)
+
+names(wine_data) <- c("Class", "Alcohol", "Malic_acid", "Ash","Alcalinity_of_ash", "Magnesium", "Total_phenols", "Flavanoids", "Nonflavanoid_phenols", "Proanthocyanins", "Color_intensity", "Hue", "OD280_OD315_diluted_wines", "Proline")
+table(wine_data$Class)
+```
+
+Then, we move to solve part C:
+
+```{r}
+cor_all <- cor(wine_data$Alcohol, wine_data$Color_intensity)
+
+cor_1 <- cor(wine_data$Alcohol[wine_data$Class == 1], wine_data$Color_intensity[wine_data$Class == 1])
+cor_2 <- cor(wine_data$Alcohol[wine_data$Class == 2], wine_data$Color_intensity[wine_data$Class == 2])
+cor_3 <- cor(wine_data$Alcohol[wine_data$Class == 3], wine_data$Color_intensity[wine_data$Class == 3])
+
+max_cor <-  max(c(cor_1, cor_2, cor_3))
+min_cor <-  min(c(cor_1, cor_2, cor_3))
+
+highest_coloeint <- wine_data[which.max(wine_data$Color_intensity), ]
+highest_coloeint$Alcohol
+
+higher_proanthocyanins <- sum(wine_data$Proanthocyanins > wine_data$Ash)
+
+percentage_higher <- (higher_proanthocyanins / nrow(wine_data)) * 100
+cor_1
+cor_2
+cor_3
+max_cor
+min_cor
+highest_coloeint
+highest_coloeint$Alcohol
+percentage_higher
+
+```
+
+1: From the output, we can see that the correlation for all alcohol and color intensity, is 0.546.
+
+2: Among all three classes of alcohol, class 1 has the highest correlation, and class 2 has the lowest correlation.
+
+3: The alcohol content of the wine with the highest color intensity is 14.34.
+
+4: There is 8.43% percent of wines that has higher content of proanthocyanins compare to ash.
+
+D:
+
+```{r}
+tableofmeans <- rbind(colMeans(wine_data[, -1]),
+               colMeans(wine_data[wine_data$Class == 1, -1]),
+               colMeans(wine_data[wine_data$Class == 2, -1]),
+               colMeans(wine_data[wine_data$Class == 3, -1]))
+tableofmeans <- as.data.frame(tableofmeans)
+rownames(tableofmeans) <- c("InTotal", "Class 1", "Class 2", "Class 3")
+round(tableofmeans, 2)
+
+```
+
+```{r}
+t_test_1_2 <- t.test(wine_data$Total_phenols[wine_data$Class == 1], 
+                     wine_data$Total_phenols[wine_data$Class == 2])
+
+t_test_1_3 <- t.test(wine_data$Total_phenols[wine_data$Class == 1], 
+                     wine_data$Total_phenols[wine_data$Class == 3])
+
+t_test_2_3 <- t.test(wine_data$Total_phenols[wine_data$Class == 2], 
+                     wine_data$Total_phenols[wine_data$Class == 3])
+
+list(t_test_1_2 = t_test_1_2, t_test_1_3 = t_test_1_3, t_test_2_3 = t_test_2_3)
+```
+
+From these results, we see that the phenol levels are statistically significantly different across all three classes, with each class showing distinct phenol levels. (T test values: 7.42, 17.12, and 7.01).
+
+Problem 2:
+
+A & B.
+
+```{r}
+askamanager_data <- read.csv("/Users/yining/Downloads/Askamanager.csv", header = TRUE)
+names(askamanager_data) <- c("Number","Time", "Age_Period", "Industry", "Job_Title","Additional Clarification", "Annual_Salary", "Money_Compensation", "Currency", "Others", "More Exp for Income", "Country", "States in US", "City", "Years_of_Working","Years_of_Working_Field","Education","Gender","Race")
+head(askamanager_data)
+```
+
+C.  
+
+```{r}
+before_restriction <- nrow(askamanager_data)
+cat("Before the restriction, the number of data is:", before_restriction,"\n")
+usd_restriction <- subset(askamanager_data, Currency == "USD")
+usd_obervation <- nrow(usd_restriction)
+cat("After the restriction, the number of data is:", usd_obervation, "\n")
+```
+
+D.  
+
+```{r}
+library(dplyr)
+
+#' Filter age data
+#'
+#' This function filters out data which age period is under 18.
+#' @param Age_Period The column contains the age range in string.
+#' @return A filtered dataset do not include people under 18 years old.
+filtered_data <- askamanager_data %>%
+  filter(Age_Period != "under 18")
+
+#' Age Transformation Function
+#'
+#' This function maps the age range (in string) to the minimum age value of each range (numerical).
+#' @param Age_Period A string representing an age range
+#' @return A numeric value corresponding to the minimum age for the given range.
+age_trs <- function(Age_Period) {
+  case_when(
+    Age_Period == "18-24" ~ 18,
+    Age_Period == "25-34" ~ 25,
+    Age_Period == "35-44" ~ 35,
+    Age_Period == "45-54" ~ 45,
+    Age_Period == "55-64" ~ 55,
+    Age_Period == "65 or over" ~ 65,
+  )
+}
+
+#' Experience Transformation Function
+#'
+#' This function converts years of total working experience into minimal numeric values.
+#' @param Years_of_Working A string represents number of years of working experience.
+#' @return A numeric value corresponding to the lower bound of the years of working range.-
+exp_trs <- function(Years_of_Working) {
+  case_when(
+    Years_of_Working == "1 year or less" ~ 0,
+    Years_of_Working == "2 - 4 years" ~ 2,
+    Years_of_Working == "5-7 years" ~ 5,
+    Years_of_Working == "8 - 10 years" ~ 8,
+    Years_of_Working == "11 - 20 years" ~ 11,
+    Years_of_Working == "21 - 30 years" ~ 21,
+    Years_of_Working == "31 - 40 years" ~ 31,
+    Years_of_Working == "41 years or more" ~ 41,
+  )
+}
+
+#' Field-Specific Experience Transformation Function
+#'
+#' This function converts years of field-specific working experience into minimal numeric values.
+#' @param Years_of_Working_Field A string representing years of experience in a specific field
+#' @return A numeric value corresponding to the lower bound of the field-specific experience range.
+field_trs <- function(Years_of_Working_Field) {
+  case_when(
+    Years_of_Working_Field == "1 year or less" ~ 0,
+    Years_of_Working_Field == "2 - 4 years" ~ 2,
+    Years_of_Working_Field == "5-7 years" ~ 5,
+    Years_of_Working_Field == "8 - 10 years" ~ 8,
+    Years_of_Working_Field == "11 - 20 years" ~ 11,
+    Years_of_Working_Field == "21 - 30 years" ~ 21,
+    Years_of_Working_Field == "31 - 40 years" ~ 31,
+    Years_of_Working_Field == "41 years or more" ~ 41,
+  )
+}
+
+#' Data Transformation and Filtering
+#'
+#' This chunk of code transforms and filters the dataset based on age and work experience including field: The Age must be greater than both total and field experience, and total experience must be greater than or equal to field-specific experience.
+#' @return A filtered dataset satisfying all conditions above.
+data_after_handled <- askamanager_data %>%
+  mutate(
+    age_index = age_trs(Age_Period),
+    field_experience_index = field_trs(Years_of_Working_Field),
+    total_experience_index = exp_trs(Years_of_Working),
+    ) %>%
+  filter(
+    age_index > field_experience_index & age_index > total_experience_index & total_experience_index >= field_experience_index
+    )
+
+num_of_observations_clean <- nrow(data_after_handled)
+cat("Unfiltered number of observations:", nrow(askamanager_data), "\n")
+cat("Filtered number of observations:", num_of_observations_clean, "\n")
+
+head(data_after_handled)
+
+
+```
+
+E. I choose to filter the data by excluding the annual salary above 0.1 billion and below 15080 USD. I am using this filter because even though it is possible that there are people who make more than 0.1 billion dollars, they do not take many percentage. For the lower bound, according to federal minimum wage of \$7.25 per hour, we can calculate the annual minimum wage as \$15080.
+
+```{r}
+filtered_data <- subset(askamanager_data, Currency == "USD" & Annual_Salary >= 15080 & Annual_Salary <= 1e8)
+head(filtered_data)
+final_sample_size <- nrow(filtered_data)
+cat("Final sample size after filtering:", final_sample_size)
+
+```
+
+Problem 3
+
+A.  
+
+```{r}
+#' Check if a number is palindromic
+#'
+#' This function checks if a given positive integer is palindromic, meaning that the integer is the same when its digits are reversed. It returns a list with two elements: whether the number is palindromic, and the reversed number.
+#' @param x A positive integer.
+#' @return A list containing: A logical value (TRUE/FALSE) indicating if the input number is palindromic and the input number with its digits reversed.
+
+isPalindromic <- function(x) {
+  
+  if (!is.numeric(x) || x <= 0 || x != as.integer(x)) {
+    stop("Error: Input must be a positive integer.")
+  }
+  
+  x_str <- as.character(x)
+  reversed_str <- paste0(rev(strsplit(x_str, NULL)[[1]]), collapse = "")
+  reversed_num <- as.numeric(reversed_str)
+  
+  is_palindromic <- (x == reversed_num)
+  
+  return(list(isPalindromic = is_palindromic, reversed = reversed_num))
+}
+
+isPalindromic(728827)
+isPalindromic(39951)
+```
+
+B and C.
+
+```{r}
+#' Check if a number is palindromic
+#'
+#' This function checks whether a given positive integer is a palindrome.
+#'
+#' @param x A positive integer to check for the palindromic property.
+#' @return A list containing two elements: A logical value indicating whether the number is palindromic (TRUE or FALSE) and the reversed number as a numeric value.
+isPalindromic <- function(x) {
+  
+  if (!is.numeric(x) || x <= 0 || x != as.integer(x)) {
+    stop("Error: Input must be a positive integer.")
+  }
+  
+  x_str <- as.character(x)
+  reversed_str <- paste0(rev(strsplit(x_str, NULL)[[1]]), collapse = "")
+  reversed_num <- as.numeric(reversed_str)
+  is_palindromic <- (x == reversed_num)
+  
+  return(list(isPalindromic = is_palindromic, reversed = reversed_num))
+}
+
+#' Find the next palindromic number
+#'
+#' This function finds the smallest palindromic number greater than the input number.
+#' @param x A positive integer to find the next palindromic number.
+#' @return The next palindromic number greater than \code{x}.
+nextPalindrome <- function(x) {
+  
+  if (!is.numeric(x) || x <= 0 || x != as.integer(x)) {
+    stop("Error: Input must be a positive integer.")
+  }
+  next_num <- x + 1
+  
+  while (!isPalindromic(next_num)$isPalindromic) {
+    next_num <- next_num + 1
+  }
+  
+  return(next_num)
+}
+
+nextPalindrome(391)
+nextPalindrome(9928)
+nextPalindrome(19272719)
+nextPalindrome(109)
+nextPalindrome(2)
+```

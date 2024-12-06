@@ -1,0 +1,122 @@
+---
+title: "506hw6-2"
+author: "Romeo Ruan"
+format: html
+---
+# A and B
+```{r, echo=TRUE}
+# Load required libraries
+library(tidyverse)
+library(parallel)
+library(future)
+library(furrr)
+library(Lahman)
+
+# Prepare the Fielding dataset with calculated Range Factor (RF) this part I used ChatGPT for assisting me to establish the use of filter.
+fielding_prepared <- Lahman::Fielding %>%
+  filter(!is.na(PO), !is.na(A), !is.na(InnOuts), InnOuts > 0) %>%
+  mutate(range_factor = 3 * (PO + A) / InnOuts)
+
+# Ensure each team has enough data for bootstrapping
+team_sizes <- fielding_prepared %>%
+  count(teamID) %>%
+  filter(n > 1)  # Keep only teams with more than 1 observation
+fielding_prepared <- fielding_prepared %>%
+  filter(teamID %in% team_sizes$teamID)
+
+#' Perform stratified bootstrapping
+#'
+#' This function resamples data within each team (stratum) and calculates the average Range Factor (RF).
+#'
+#' @param data A data frame containing team data with a "teamID" column and "range_factor" column.
+#' @return A data frame with resampled averages for each team.
+stratified_bootstrap <- function(data) {
+  resampled_data <- data %>%
+    group_by(teamID) %>%
+    sample_frac(replace = TRUE) %>%
+    summarise(avg_range_factor = mean(range_factor, na.rm = TRUE), .groups = "drop")
+  return(resampled_data)
+}
+
+# Test the stratified bootstrap function
+stratified_bootstrap(fielding_prepared)
+
+# Number of bootstrap repetitions
+reps <- 1000
+set.seed(123)
+
+# Without parallel processing
+system.time({
+  bootstrap_no_parallel <- lapply(seq_len(reps), function(x) stratified_bootstrap(fielding_prepared))
+})
+
+# With parallel processing using `parallel` package
+set.seed(123)
+system.time({
+  cluster <- makeCluster(detectCores() - 1)
+  clusterEvalQ(cluster, library(dplyr))
+  clusterExport(cluster, "fielding_prepared")
+  bootstrap_parallel <- parLapply(cluster, seq_len(reps), function(x) {
+    fielding_prepared %>%
+      group_by(teamID) %>%
+      sample_frac(replace = TRUE) %>%
+      summarise(avg_range_factor = mean(range_factor, na.rm = TRUE), .groups = "drop")
+  })
+  stopCluster(cluster)
+})
+
+# With parallel processing using `future` package
+set.seed(123)
+plan(multisession, workers = detectCores() - 1)
+system.time({
+  bootstrap_future <- future_map_dfr(seq_len(reps), ~ stratified_bootstrap(fielding_prepared), .options = furrr_options(seed = TRUE))
+})
+
+#' Combine and summarize bootstrap results
+#'
+#' This function combines bootstrap samples and calculates estimates and standard errors for each team.
+#'
+#' @param bootstrap_results A list of data frames containing bootstrap samples.
+#' @return A data frame with average estimates and standard errors for each team.
+combine_and_summarize <- function(bootstrap_results) {
+  bootstrap_combined <- bind_rows(bootstrap_results)
+  estimates <- bootstrap_combined %>%
+    group_by(teamID) %>%
+    summarise(
+      avg_estimate = mean(avg_range_factor),
+      std_error = sd(avg_range_factor),
+      .groups = "drop"
+    )
+  return(estimates)
+}
+
+# Compute results for each method
+results_no_parallel <- combine_and_summarize(bootstrap_no_parallel)
+results_parallel <- combine_and_summarize(bootstrap_parallel)
+results_future <- combine_and_summarize(list(bootstrap_future))
+
+# Identify the top 10 teams by average RF
+top_teams <- fielding_prepared %>%
+  group_by(teamID) %>%
+  summarise(avg_range_factor = mean(range_factor, na.rm = TRUE)) %>%
+  top_n(10, avg_range_factor) %>%
+  pull(teamID)
+
+```
+
+# C
+```{r}
+# Filter results for the top teams
+final_results <- list(
+  no_parallel = results_no_parallel,
+  parallel = results_parallel,
+  future = results_future
+) %>%
+  bind_rows(.id = "method") %>%
+  filter(teamID %in% top_teams)
+
+# Print the final results
+print(final_results)
+```
+
+Discussion: All three methods yield similar avg_estimate and std_error values across teams. The differences are minor and generally occur after the 3rd or 4th decimal place. These minor variations stem from how random sampling and computations are handled in parallel and sequential environments (the response of the possible reason is partly based on my search on Internet and ChatGPT)

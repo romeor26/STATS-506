@@ -1,0 +1,311 @@
+---
+title: "STATS506 HW2"
+author: "Romeo Ruan"
+format: html
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(interactions)
+library(emmeans)
+
+```
+
+# Problem 1
+
+## a
+
+```{r}
+#' Use the loop for version 1 of dice game
+#' @param n Number of rolls to make
+#' @return Total won/lost in dollars
+v1 <- function(n ,seed = NULL) {
+  if (n < 1) {
+    return(0)
+  }
+  
+  dice <- sample(1:6, n, replace = TRUE)
+  total <- 0
+  
+  for (k in 1:n) {
+    total <- total - 2
+    if (dice[k] == 3 | dice[k] == 5) {
+      total <- total + 2 * dice[k]
+    }
+  }
+  
+  return(total)
+}
+
+  
+#' Use the loop for version 2 of dice game
+#' @param n Number of rolls to make
+#' @return Total won/lost in dollars
+v2 <- function(n) {
+  if (n < 1) {
+    return(0)
+  }
+  
+  dice <- sample(1:6, n, replace = TRUE)
+  winnings <- rep(0, n)
+
+  winnings[dice == 3 | dice == 5] <- 2 * dice[dice == 3 | dice == 5]
+  
+  total_wins <- sum(winnings) - 2 * n
+  
+  return(total_wins)
+}
+  
+
+#' Use the loop for version 3 of dice game
+#' @param n Number of rolls to make
+#' @return Total won/lost in dollars
+v3 <- function(n) {
+  if (n < 1) {
+    return(0)
+  }
+
+  dice <- sample(1:6, n, replace = TRUE)
+  dice <- table(factor(dice, levels = 1:6))
+
+  total <- dice[3]*6 + dice[5]*10 - 2*n
+  names(total) <- NULL
+
+  return(total)
+}
+
+#' Use the loop for version 4 of dice game
+#' @param n Number of rolls to make
+#' @return Total won/lost in dollars
+v4 <- function(n) {
+  if (n < 1) {
+    return(0)
+  }
+  
+  dice <- sample(1:6, n, replace = TRUE)
+  
+  total <- -2 * n + sum(vapply(dice, function(x) {
+    if (x == 3 | x == 5) {
+      return(2*x)
+    } else {
+      return(0)
+    }
+  }, 1))
+  
+  return(total)
+}
+  
+```
+
+## b
+
+```{r}
+c(v1(3), v2(3), v3(3), v4(3))
+c(v1(3000), v2(3000), v3(3000), v4(3000))
+```
+
+## c
+
+```{r}
+#' Use the loop for version 1 of dice game
+#' @param n Number of rolls to make
+#' @return Total won/lost in dollars
+v1 <- function(n ,seed = NULL) {
+  if (n < 1) {
+    return(0)
+  }
+  
+  set.seed(seed)
+  dice <- sample(1:6, n, replace = TRUE)
+  total <- 0
+  
+  for (k in 1:n) {
+    total <- total - 2
+    if (dice[k] == 3 | dice[k] == 5) {
+      total <- total + 2 * dice[k]
+    }
+  }
+  
+  return(total)
+}
+
+  
+#' Use the loop for version 2 of dice game
+#' @param n Number of rolls to make
+#' @return Total won/lost in dollars
+v2 <- function(n ,seed = NULL) {
+  if (n < 1) {
+    return(0)
+  }
+  
+  set.seed(seed)
+  dice <- sample(1:6, n, replace = TRUE)
+  winnings <- rep(0, n)
+  
+  winnings[dice == 3 | dice == 5] <- 2 * dice[dice == 3 | dice == 5]
+  
+  total_wins <- sum(winnings) - 2 * n
+  
+  return(total_wins)
+}
+  
+
+#' Use the loop for version 3 of dice game
+#' @param n Number of rolls to make
+#' @return Total won/lost in dollars
+v3 <- function(n, seed = NULL) {
+  if (n < 1) {
+    return(0)
+  }
+  
+  set.seed(seed)
+  dice <- sample(1:6, n, replace = TRUE)
+  dice <- table(factor(dice, levels = 1:6))
+
+  total <- dice[3]*6 + dice[5]*10 - 2*n
+  names(total) <- NULL
+
+  return(total)
+}
+
+#' Use the loop for version 4 of dice game
+#' @param n Number of rolls to make
+#' @return Total won/lost in dollars
+v4 <- function(n, seed = NULL) {
+  if (n < 1) {
+    return(0)
+  }
+  
+  set.seed(seed)
+  dice <- sample(1:6, n, replace = TRUE)
+  
+  total <- -2 * n + sum(vapply(dice, function(x) {
+    if (x == 3 | x == 5) {
+      return(2*x)
+    } else {
+      return(0)
+    }
+  }, 1))
+  
+  return(total)
+}
+
+c(v1(3, seed = 1), v2(3, seed = 1), v3(3, seed = 1), v4(3, seed = 1))
+c(v1(3000, seed = 123), v2(3000, seed = 123), v3(3000, seed = 123), v4(3000, seed = 123))
+```
+
+## d
+
+```{r}
+library(microbenchmark)
+microbenchmark(loop   = v1(1000, seed = 13),
+               vctrzd = v2(1000, seed = 13),
+               table  = v3(1000, seed = 13),
+               apply  = v4(1000, seed = 13))
+microbenchmark(loop   = v1(100000, seed = 13),
+               vctrzd = v2(100000, seed = 13),
+               table  = v3(100000, seed = 13),
+               apply  = v4(100000, seed = 13))
+```
+
+Conclusion: loop is quick small input, but becomes less efficient for large-scale operations. Vectorized Approach is the most efficient for both small and large inputs. Table performs relatively well for larger inputs but is slower for small inputs due to the overhead of creating the table. Apply is consistently the slowest approach due to the overhead of applying functions based on elements.
+
+## e
+
+```{r}
+rep <- 100000
+store <- vector(length = rep)
+for (i in 1:rep) {
+  store[i] <- v2(1000)
+}
+hist(store)
+abline(v = mean(store), col = "blue")
+```
+
+If we calculate its expected value, we have: (6 \* 1/6)+(10 \* 1/6)+(0 \* 4/6)-2=0.67. Also from our simulation, we can see that it is not a fair game in that the blue line does not indicate at 0.
+
+#Problem 2
+
+## a
+
+```{r}
+cars_data <- read.csv("/Users/yining/Downloads/cars.csv")
+names(cars_data) <- c(
+"Height", "Length", "Width", "Driveline", "Engine_Type", "Hybrid",
+"Fwd_Gears", "Transmission", "City_MPG", "Fuel_Type", "Highway_MPG",
+"Classification", "ID", "Make", "Model_Year", "ID_Year", "HP", "Torque")
+head(cars_data)
+```
+
+## b
+
+```{r}
+table(cars_data$Fuel_Type)
+filtered_data <- subset(cars_data, Fuel_Type == "Gasoline")
+nrow(filtered_data)
+```
+
+## c
+
+```{r}
+ggplot(filtered_data, aes(x = Highway_MPG)) +
+  geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+  ggtitle("Distribution for Highway MPG") +
+  xlab("Highway MPG") +
+  ylab("Frequency")
+```
+
+From the graph, we can see the diagram is especially right-skewed, so a transformation should be used, so let's do a log transformation and generate a more suitable graph:
+
+```{r}
+filtered_data$log_Highway_MPG <- log(filtered_data$Highway_MPG)
+ggplot(filtered_data, aes(x = log_Highway_MPG)) +
+  geom_histogram(binwidth = 0.1, color = "black", fill = "green") +
+  ggtitle("Distribution of Log Transformed Highway MPG") +
+  xlab("Log of Highway MPG") +
+  ylab("Frequency")
+```
+
+## d
+
+```{r}
+model <- lm(Highway_MPG ~ HP + Torque + Height + Length + Width +
+            as.factor(ID_Year), data = filtered_data)
+summary(model)
+```
+
+The coefficient for Torque is -0.0507425, and this indicates that higher torque results in lower highway mpg, on average.
+
+## e
+
+```{r}
+model <- lm(Highway_MPG ~ Torque*HP + Height + Length + Width +
+            as.factor(ID_Year), data = filtered_data)
+hist(cars_data$Torque)
+hist(cars_data$HP)
+summary(cars_data$HP)
+summary(cars_data$Torque)
+```
+
+From the tables, we can see that horsepower ranges from 100 to 638, and torque ranges from 98 to 774. Horsepower ranges from 100 to 600, and most torque does not exceed 400. Based on this, we can visualizae the interaction:
+
+```{r}
+emmip(model, HP ~ Torque, at = list(Torque = seq(150, 400, 100), HP = c(200, 300, 400)))
+```
+
+```{r}
+interact_plot(model, pred = Torque, modx = HP,
+              at = list(ID_Year = 2012))
+```
+
+## f
+
+```{r}
+X <- model.matrix(Highway_MPG ~ Torque*HP + Height + Length + Width +
+                    as.factor(ID_Year), data = filtered_data)
+y <- filtered_data$Highway_MPG
+betahat <- solve(t(X)%*%X)%*%t(X)%*%y
+cbind(model$coef, betahat)
+```
+Github Rep Link: https://github.com/romeor26/STATS-506

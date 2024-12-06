@@ -1,0 +1,300 @@
+---
+title: "506HW3"
+format: html
+author: Romeo Ruan
+---
+
+
+# Problem 1
+
+For the problem, I have used the help frpm ChatGPT for writing code generating logistic regression, the psudo R^2, and AIC values.
+
+## A
+```{r}
+
+# Install necessary packages
+if (!require(haven)) install.packages("haven")
+if (!require(dplyr)) install.packages("dplyr")
+
+library(haven)
+library(dplyr)
+
+# Import the datasets from the URLs
+vix_d <- read_xpt("https://wwwn.cdc.gov/Nchs/Nhanes/2005-2006/VIX_D.XPT")
+demo_d <- read_xpt("https://wwwn.cdc.gov/Nchs/Nhanes/2005-2006/DEMO_D.XPT")
+# Merge the two datasets using SEQN
+merged_data <- merge(vix_d, demo_d, by = "SEQN")
+# Keep only matched records
+merged_data <- merged_data %>% filter(!is.na(SEQN))
+# Check the sample size
+nrow(merged_data)
+```
+## B
+```{r}
+# Rename variables
+merged_data <- merged_data %>%
+  rename(glasses = VIQ220, age = RIDAGEYR)
+# Handle missing values: Replace glasses = 9 with NA, subtract 1 from glasses variable
+merged_data <- merged_data %>%
+  mutate(glasses = ifelse(glasses == 9, NA, glasses - 1))
+# Create 10-year age brackets
+merged_data <- merged_data %>%
+  mutate(age_bracket = cut(age, breaks = seq(0, 90, by = 10), include.lowest = TRUE, right = FALSE, 
+                           labels = c("0-9", "10-19", "20-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80-89")))
+# Calculate the proportion of glasses/contact lenses wearers by age bracket
+proportion_glasses <- merged_data %>%
+  group_by(age_bracket) %>%
+  summarise(Proportion_Wear_Glasses = mean(glasses == 1, na.rm = TRUE) * 100)
+# Produce a nicely formatted table with the results
+knitr::kable(proportion_glasses, digits = 1, col.names = c("Age Bracket", "Proportion Wearing Glasses (%)"))
+```
+## C
+```{r}
+# Clean up gender
+merged_data <- merged_data %>%
+  rename(gender = RIAGENDR) %>%
+  mutate(female = ifelse(gender == 2, 1, 0))
+# Clean up race
+merged_data <- merged_data %>%
+  rename(race = RIDRETH1)
+# Create labels for race categories (optional for visualization purposes)
+race_labels <- c("Mexican American", "Other Hispanic", "Non-Hispanic White", "Non-Hispanic Black", "Multi-racial")
+# Clean up PIR (poverty income ratio)
+merged_data <- merged_data %>%
+  rename(pir = INDFMPIR)
+# Logistic regression models
+# Model 1: age as predictor
+model1 <- glm(glasses ~ age, data = merged_data, family = "binomial")
+# Model 2: age, race, and gender as predictors
+model2 <- glm(glasses ~ age + factor(race) + factor(female), data = merged_data, family = "binomial")
+# Model 3: age, race, gender, and PIR as predictors
+model3 <- glm(glasses ~ age + factor(race) + factor(female) + pir, data = merged_data, family = "binomial")
+
+# Display the models' results with pseudo R-squared and AIC
+stargazer::stargazer(model1, model2, model3, type = "text", 
+                     apply.coef = exp,  # Show odds ratios
+                     column.labels = c("Model 1", "Model 2", "Model 3"),
+                     dep.var.labels = "Wears Glasses",
+                     covariate.labels = c("Age", "Race: Other Hispanic", "Race: Non-Hispanic White", 
+                                          "Race: Non-Hispanic Black", "Race: Multi-racial", "Female", "Poverty Income Ratio"),
+                     add.lines = list(c("N", nobs(model1), nobs(model2), nobs(model3)),
+                                      c("Pseudo R-squared", round(1 - model1$deviance/model1$null.deviance, 5),
+                                                            round(1 - model2$deviance/model2$null.deviance, 5),
+                                                            round(1 - model3$deviance/model3$null.deviance, 5)),
+                                      c("AIC", round(AIC(model1), 2), round(AIC(model2), 2), round(AIC(model3), 2))))
+```
+## D
+```{r}
+# Load necessary libraries
+if (!require(broom)) install.packages("broom")
+if (!require(margins)) install.packages("margins")
+
+library(broom)
+library(margins)
+
+# Fit the logistic regression model
+model3 <- glm(glasses ~ age + factor(race) + factor(female) + pir, data = merged_data, family = "binomial")
+
+# Get the odds ratios (exponentiate coefficients), standard errors, z-values, p-values, and confidence intervals
+logit_results <- tidy(model3, conf.int = TRUE) %>%
+  mutate(Odds_Ratio = exp(estimate), `2.5 %` = exp(conf.low), `97.5 %` = exp(conf.high)) %>%
+  select(term, Odds_Ratio, std.error, statistic, p.value, `2.5 %`, `97.5 %`)
+
+# Rename variables as per custom labels
+logit_results <- logit_results %>%
+  mutate(term = recode(term, 
+                       `age` = "Age", 
+                       `factor(race)2` = "Race: Other Hispanic",
+                       `factor(race)3` = "Race: Non-Hispanic White",
+                       `factor(race)4` = "Race: Non-Hispanic Black",
+                       `factor(race)5` = "Race: Multi-racial",
+                       `factor(female)1` = "Female",
+                       `pir` = "Poverty Income Ratio"))
+
+# Print the results with renamed columns and terms
+print(logit_results)
+
+# Calculate predictive margins for female
+margins_female <- margins(model3, variables = "female")
+summary(margins_female)
+
+```
+From the output, we know that the estimated odds ratio for females is 0.5967415, which is statistically significant, indicating that the odds of females wearing glasses of distance vision is statistically significantly lower than that of males. Also, from the tables, we observe that the proportion of female wearing glasses for distance vision is statistically lower than males.
+
+
+# Problem 2
+```{r}
+# Load the dataset
+library(DBI)
+sakila <- dbConnect(RSQLite::SQLite(), "/Users/yining/Downloads/sakila_master.db")
+```
+
+## A
+```{r}
+# Do query
+dbGetQuery(sakila, "
+SELECT release_year, COUNT(*) AS movie_count
+  FROM film
+ GROUP BY release_year
+ ORDER BY release_year ASC
+ LIMIT 1;
+")
+```
+The oldest movie is from 2006, and there were 1000 movies released that year.
+
+## B
+```{r}
+# R approach
+fc <- dbGetQuery(sakila, "SELECT * FROM film_category")
+cat <- dbGetQuery(sakila, "SELECT * FROM category")
+catcount <- table(fc$category_id)
+mincat <- which.min(catcount)
+c(cat$name[cat$category_id == mincat], catcount[mincat])
+```
+
+```{r}
+# Single query approach
+dbGetQuery(sakila, "
+SELECT c.name, COUNT(c.category_id) AS count
+  FROM category AS c
+ RIGHT JOIN film_category AS fc ON fc.category_id = c.category_id
+ GROUP BY c.category_id
+ ORDER BY count ASC
+ LIMIT 1
+")
+```
+Music is the least genre, with 51 movies.
+
+## C
+```{r}
+# Query the customer data from the 'customer' table in the sakila database
+customer <- dbGetQuery(sakila, "SELECT * FROM customer")
+
+# Query the address data from the 'address' table
+address <- dbGetQuery(sakila, "SELECT * FROM address")
+
+# Query the city data from the 'city' table
+city <- dbGetQuery(sakila, "SELECT * FROM city")
+
+# Query the country data from the 'country' table
+country <- dbGetQuery(sakila, "SELECT * FROM country")
+
+# Merge the customer data with the address data based on the 'address_id' column
+# Keep all rows from 'customer' and only the matching rows from 'address' (left join)
+merged1 <- merge(customer, address, by = "address_id", all.x = TRUE, all.y = FALSE)
+
+# Merge the resulting dataset (merged1) with the city data based on the 'city_id' column
+# Keep all rows from the previous merge (merged1) and only the matching rows from 'city'
+merged2 <- merge(merged1, city, by = "city_id", all.x = TRUE, all.y = FALSE)
+
+# Merge the resulting dataset (merged2) with the country data based on the 'country_id' column
+# Keep all rows from the previous merge (merged2) and only the matching rows from 'country'
+merged3 <- merge(merged2, country, by = "country_id", all.x = TRUE, all.y = FALSE)
+
+# Create a frequency table showing the count of each country in the merged data
+t <- table(merged3$country)
+
+# Filter the table to display only countries that appear exactly 13 times
+t[t == 13]
+
+```
+
+```{r}
+# Find the city IDs corresponding to each customer by matching their address IDs in the address table
+cities <- address$city_id[match(customer$address_id, address$address_id)]
+# Find the country IDs corresponding to the city IDs found earlier
+countries <- city$country_id[match(cities, city$city_id)]
+# Create a frequency table of country names based on the country IDs found in the previous step.
+tcountries <- table(country$country[match(countries, country$country_id)])
+# Filter the frequency table to show only the countries that appear exactly 13 times
+tcountries[tcountries == 13]
+
+```
+
+```{r}
+# Single query approach
+dbGetQuery(sakila, "
+SELECT co.country, count(co.country) AS count
+  FROM country AS co
+ RIGHT JOIN
+    (SELECT country_id
+       FROM city AS ci
+      RIGHT JOIN
+         (SELECT city_id
+            FROM customer AS c
+            LEFT JOIN address AS a ON c.address_id = a.address_id
+         ) AS ca ON ca.city_id = ci.city_id
+    ) AS ccc ON ccc.country_id = co.country_id
+ GROUP BY co.country
+HAVING count == 13")
+```
+
+# Problem 3
+```{r}
+# Load the dataset
+data <- read.csv("/Users/yining/Downloads/us-500.csv")
+```
+# A
+```{r}
+# calculate the proportion
+length(data$email[grepl("com$", data$email)])/nrow(data)
+```
+# B
+```{r}
+# Split the email addresses into two parts: username (before '@') and domain (after '@')
+emails <- strsplit(data$email, "@")
+
+# Extract the username part (the part before the '@') from each email
+username <- sapply(emails, "[[", 1)
+
+# Check whether the username contains any non-alphanumeric characters
+username_notalphanumeric <- grepl("[^a-zA-Z0-9]", username)
+
+# Extract the domain part (the part after the '@') from each email
+domains <- sapply(emails, "[[", 2)
+
+# Remove the top-level domain (TLD) from the domain names
+domains <- gsub("\\.[a-z]{3}", "", domains)
+
+# Check whether the domain contains any non-alphanumeric characters
+domain_notalphanumeric <- grepl("[^a-zA-Z0-9]", domains)
+
+# Calculate the proportion of emails where either the username or the domain contains non-alphanumeric characters
+mean(username_notalphanumeric | domain_notalphanumeric)
+
+```
+# C
+```{r}
+# We first check that all phone numbers have the same length of digits.
+table(sapply(data$phone1, nchar))
+# Extract the first three digits (area codes) from phone1 and phone2
+phone1area <- substr(data$phone1, 1, 3)
+phone2area <- substr(data$phone2, 1, 3)
+# Combine the two area code vectors, count their occurrences, sort in decreasing order, and get the top 5
+top5_area_codes <- sort(table(c(phone1area, phone2area)), decreasing = TRUE)[1:5]
+# Display the result
+top5_area_codes
+```
+# D
+```{r}
+# Filter out addresses that end with a number using regular expression
+apartments <- data$address[grepl("[0-9]+$", data$address)]
+
+# Split the filtered addresses by spaces and extract the last element (the apartment number)
+numbers <- sapply(strsplit(apartments, " "), function(x) x[length(x)])
+
+# Remove any "#" symbol from the numbers using 'gsub()'
+numbers <- as.numeric(gsub("#", "", numbers))
+
+# Create a histogram of the log-transformed apartment numbers
+hist(log(numbers))
+
+```
+# E
+```{r}
+# Check Benfor's law
+table(substr(numbers, 1, 1))
+```
+From the output, this is a normal distribution instead of a decreasing distribution by Benford's law, so the data wouldn't be pass as real.
+
+Github Repo: https://github.com/romeor26/STATS-506

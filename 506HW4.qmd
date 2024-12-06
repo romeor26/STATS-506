@@ -1,0 +1,263 @@
+---
+title: "506HW4"
+author: "Romeo Ruan"
+format: html
+---
+
+# Problem 1
+
+```{r}
+# load necessary packages
+library(tidyverse)
+library(nycflights13)
+head(flights)
+```
+
+## a
+
+```{r}
+# departure
+flights %>% 
+  group_by(origin) %>% 
+  # Summarize the average and median departure delay, and count the number of flights from each origin
+  summarize(mean_delay = mean(dep_delay, na.rm = TRUE),  # Calculate the mean departure delay, ignoring NA values
+            med_delay = median(dep_delay, na.rm = TRUE), # Calculate the median departure delay, ignoring NA values
+            nflights = n()) %>%                         # Count the number of flights from each origin
+  ungroup() %>%                                         # Remove grouping after summarization
+  filter(nflights >= 10) %>%                            # Filter out origins with fewer than 10 flights
+  left_join(airports, by = c("origin" = "faa")) %>%     # Join with the airports dataset to get airport names
+  select(name, mean_delay, med_delay) %>%               # Select only the airport name, mean delay, and median delay columns
+  arrange(desc(mean_delay))                             # Arrange in descending order of mean delay
+
+# arrival
+flights %>% 
+  group_by(dest) %>% 
+  # Summarize the average and median arrival delay, and count the number of flights to each destination
+  summarize(mean_delay = mean(arr_delay, na.rm = TRUE),  # Calculate the mean arrival delay, ignoring NA values
+            med_delay = median(arr_delay, na.rm = TRUE), # Calculate the median arrival delay, ignoring NA values
+            nflights = n()) %>%                          # Count the number of flights to each destination
+  ungroup() %>%                                          # Remove grouping after summarization
+  filter(nflights >= 10) %>%                             # Filter out destinations with fewer than 10 flights
+  left_join(airports, by = c("dest" = "faa")) %>%        # Join with the airports dataset to get airport names
+  select(name, mean_delay, med_delay) %>%                # Select only the airport name, mean delay, and median delay columns
+  arrange(desc(mean_delay))                              # Arrange in descending order of mean delay
+```
+
+# b
+
+```{r}
+# Join flights data with planes data to include plane information based on tail number
+flights %>% 
+  left_join(planes, by = "tailnum") %>%
+  
+  # Calculate flight time in hours and speed (distance per hour)
+  mutate(time = air_time / 60, speed = distance / time) %>% 
+  
+  # Group by plane model and calculate average speed and number of flights for each model
+  group_by(model) %>% 
+  summarize(av_speed = mean(speed, na.rm = TRUE), nflights = n()) %>% 
+  
+  # Arrange in descending order of average speed and select the top model
+  arrange(desc(av_speed)) %>% 
+  slice(1)
+```
+
+# Problem 2
+
+```{r}
+#' Get Average Monthly Temperature
+#' 
+#' This function calculates the average temperature for a given month and year from a specified dataset.
+#' 
+#' @param month A numeric value (1-12) or a string indicating the month.
+#' @param year A numeric value indicating the year.
+#' @param data A dataset containing the columns `month_numeric`, `year`, and `temp`.
+#' @param average_fn A function to compute the average (default is `mean`).
+#' @param celsius A logical value indicating whether to return the temperature in Celsius (default is `FALSE` for Fahrenheit).
+#' @return A numeric vector of length 1 representing the average temperature.
+get_temp <- function(month, year, data, average_fn = mean, celsius = FALSE) {
+  
+  # Validate the `month` parameter
+  if (month %>% is.numeric()) {
+    if (month < 1 | month > 12) {
+      stop("Invalid month")
+    }
+  } else if (month %>% is.character()) {
+    # Convert month name to numeric equivalent using dplyr and stringr functions
+    months <- c("January", "February", "March", "April", "May", "June", "July",
+                "August", "September", "October", "November", "December")
+    
+    month <- month %>%
+      str_to_title() %>%  # Convert month name to title case to handle case insensitivity
+      match.arg(choices = months) %>%  # Validate and match against full month names
+      match(months) # Convert matched name to corresponding numeric month
+  } else {
+    stop("Month must be either numeric (1-12) or a valid month name.")
+  }
+
+  # Validate the `year` parameter using tidyverse functions
+  if (!year %>% is.numeric()) {
+    stop("Year must be numeric.")
+  }
+  if (year %>% between(1997, 2000) %>% `!`) {
+    stop("Year out of range: must be between 1997 and 2000.")
+  }
+
+  # Validate the `average_fn` parameter using tidyverse functions
+  if (!average_fn %>% is.function()) {
+    stop("The average_fn argument must be a valid function.")
+  }
+
+  # Filter and calculate the average temperature
+  result <- data %>%
+    select(temp, month_numeric, year) %>%
+    rename(year_col = year) %>%
+    filter(year_col == year, month_numeric == month) %>%
+    summarize(avgtmp = average_fn(temp)) %>%
+    mutate(avgtmp = ifelse(celsius, (avgtmp - 32) * 5/9, avgtmp)) %>%
+    pull(avgtmp)  # Extract the result as a numeric value
+
+  return(result)
+}
+
+# Load the dataset
+nnmaps <- read_csv("/Users/yining/Downloads/chicago-nmmaps.csv", show_col_types = FALSE)
+
+```
+
+```{r}
+get_temp("Apr", 1999, data = nnmaps)
+```
+
+```{r}
+get_temp("Apr", 1999, data = nnmaps, celsius = TRUE)
+```
+
+```{r}
+get_temp(10, 1998, data = nnmaps, average_fn = median)
+```
+
+```{r, error = TRUE, warning = TRUE}
+get_temp(13, 1998, data = nnmaps)
+```
+
+```{r, error = TRUE, warning = TRUE}
+get_temp(2, 2005, data = nnmaps)
+```
+
+```{r}
+get_temp("November", 1999, data =nnmaps, celsius = TRUE,
+         average_fn = function(x) {
+           x %>% sort -> x
+           x[2:(length(x) - 1)] %>% mean %>% return
+         })
+```
+
+# Problem 3
+
+```{r}
+# load the dataset
+df <-  read_csv("/Users/yining/Downloads/df_for_ml_improved_new_market.csv", show_col_types = FALSE)
+```
+
+# a
+
+```{r}
+# Plot 1: Change in sales price over time
+plot_price_over_time <- df %>%
+  
+  # Group by year and calculate the average sales price
+  group_by(year) %>%
+  summarize(avg_price_usd = mean(price_usd, na.rm = TRUE)) %>%
+  
+  # Create a line plot to visualize the change in average sales price over the years
+  ggplot(aes(x = year, y = avg_price_usd)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "blue", size = 2) +
+  
+  # Add plot labels and minimal theme for a clean look
+  labs(
+    title = "Change in Sales Price Over Time",
+    x = "Year",
+    y = "Average Sales Price (USD)"
+  ) +
+  theme_minimal(base_size = 15)
+
+# Display the plot
+print(plot_price_over_time)
+
+```
+
+Yes, there's a change of sales price in USD over time. The chart shows a steady increase in sales prices with a sharp peak in 2008, followed by a drop and fluctuating stabilization. This pattern might reflect economic factors, such as the housing market boom and the subsequent recession around 2008. 1995 - Early 2000s: The average sales price remains relatively low, fluctuating between around \$10,000 and \$15,000 with minimal growth. 2002 - 2006: A noticeable upward trend begins, with average sales prices gradually increasing. 2006 - 2008: A sharp rise occurs, reaching a peak of over \$40,000 in 2008. This is the highest point in the series. 2008 - 2012: Following the peak, there is a significant decline around 2009, likely indicating a market downturn. Afterward, sales prices fluctuate at lower levels than the peak, around \$30,000, without major recovery
+
+# b
+
+```{r}
+# Plot: Change in sales price over time by country (treated as genre)
+plot_price_by_country <- df %>%
+
+  # Select relevant columns and reshape country data to a longer format
+  select(year, price_usd, starts_with("Country")) %>%
+  pivot_longer(cols = starts_with("Country"), names_to = "Country", values_to = "Count") %>%
+  
+  # Filter to keep only rows where the country (genre) indicator is 1
+  filter(Count == 1) %>%
+  
+  # Group by year and country (treated as genre) and calculate average sales price in USD
+  group_by(year, Country) %>%
+  summarize(avg_price_usd = mean(price_usd, na.rm = TRUE)) %>%
+  
+  # Plot the change in sales price over time for each country
+  ggplot(aes(x = year, y = avg_price_usd, color = Country)) +
+  geom_line(size = 1) +
+  labs(
+    title = "Change in Sales Price Over Time by Country (Genre)",
+    x = "Year",
+    y = "Average Sales Price (USD)",
+    color = "Country (Genre)"
+  ) +
+  theme_minimal(base_size = 15) +
+  scale_color_viridis_d()
+
+# Display the plot
+print(plot_price_by_country)
+
+```
+
+Assume different countries denote different genres, then from the plot, we may conclude that the distribution of genre of sales across years appear to change. China (Blue Line): China shows a significant spike in average sales price around 2008, reaching well above 150,000 USD, making it the highest peak among all countries in the chart. After this peak, the sales price sharply declines, with some fluctuation around the \$50,000 mark in the following years. Japan (Green Line): Japan’s average sales price rises steadily until around 2008, though it remains lower than China's peak. It shows moderate fluctuations after 2008, staying within a range of approximately 20,000 USD to 60,000 USD. Swiss (Yellow Line): The Swiss line shows a gradual increase over time, reaching its highest point around 2008 but not as dramatically as China. Its prices remain somewhat stable after the peak, hovering around 20,000 USD to \$30,000. Other Countries (Light Green, Dutch, Austria): The lines for Austria, Dutch, and the "Others" category show more subtle increases over time, with average prices peaking around 2008 but staying below \$50,000 throughout the period. After 2008, these prices experience fluctuations without any significant spikes.
+
+# c
+
+```{r}
+# Plot: Change in sales price over time by country (treated as genre)
+plot_price_by_country <- df %>%
+  
+  # Select relevant columns and transform country indicators to long format
+  select(year, price_usd, starts_with("Country")) %>%
+  pivot_longer(cols = starts_with("Country"), names_to = "Country", values_to = "Count") %>%
+  
+  # Filter rows where the country indicator is set to 1
+  filter(Count == 1) %>%
+  
+  # Group by year and country, and calculate the average sales price
+  group_by(year, Country) %>%
+  summarize(avg_price_usd = mean(price_usd, na.rm = TRUE)) %>%
+  
+  # Create a line plot to visualize the change in sales price over time by country (genre)
+  ggplot(aes(x = year, y = avg_price_usd, color = Country)) +
+  geom_line(size = 1) +
+  labs(
+    title = "Change in Sales Price Over Time by Country (Genre)",
+    x = "Year",
+    y = "Average Sales Price (USD)",
+    color = "Country (Genre)"
+  ) +
+  theme_minimal(base_size = 15) +
+  scale_color_viridis_d()
+
+# Display the plot
+print(plot_price_by_country)
+
+```
+
+Yes, genre (country of origin in this case) appears to affect sales, with certain genres experiencing higher peaks and demand, as evidenced by China’s unique pattern compared to other countries. This could reflect differing consumer preferences, market trends, or the cultural value attributed to items from these countries

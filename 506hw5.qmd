@@ -1,0 +1,327 @@
+---
+title: "506HW5"
+author: "Romeo Ruan"
+format: html
+execute:  
+  error: true
+---
+
+```{r}
+# Install plotly if not already installed
+library(plotly)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+```
+
+# Problem 1
+
+## a
+
+```{r}
+# Load Rcpp for GCD and LCM calculations
+library(Rcpp)
+
+# Define GCD and LCM using Rcpp to ensure they handle two arguments correctly
+cppFunction('
+#include <numeric> // Include for std::gcd in C++17
+int gcd(int a, int b) {
+  return std::gcd(a, b); // Use std::gcd for calculating GCD
+}
+
+int lcm(int a, int b) {
+  return std::abs(a * b) / std::gcd(a, b); // Use std::gcd for calculating LCM
+}
+')
+
+# Define the rational S4 class with a constructor, show method, and operators
+setClass("rational",
+         slots = list(numerator = "integer", denominator = "integer"),
+         validity = function(object) {
+           if (object@denominator == 0) {
+             return("Denominator cannot be zero")
+           }
+           TRUE
+         })
+
+# Constructor
+# Define the rational S4 class
+setClass("rational",
+         slots = list(numerator = "integer", denominator = "integer"),
+         validity = function(object) {
+           # Check if denominator is zero
+           if (object@denominator == 0) {
+             return("Denominator cannot be zero.")
+           }
+           # Check if both slots are non-missing integers
+           if (is.na(object@numerator) || is.na(object@denominator)) {
+             return("Numerator and denominator must be valid integers.")
+           }
+           TRUE
+         })
+
+# Constructor function for the rational class
+rational <- function(numerator, denominator = NULL) {
+  # Case 1: Input is a string "numerator/denominator"
+  if (is.character(numerator) && is.null(denominator)) {
+    parts <- strsplit(numerator, "/")[[1]]
+    if (length(parts) != 2) stop("Input string must be in the form 'numerator/denominator'.")
+    
+    # Convert parts to integers
+    numerator <- suppressWarnings(as.integer(parts[1]))
+    denominator <- suppressWarnings(as.integer(parts[2]))
+    
+    # Check for NA values after coercion
+    if (is.na(numerator) || is.na(denominator)) {
+      stop("Both numerator and denominator must be integers.")
+    }
+  }
+  
+  # Case 2: Input is two arguments, expecting them to be numeric
+  else if (is.numeric(numerator) && is.numeric(denominator)) {
+    numerator <- as.integer(numerator)
+    denominator <- as.integer(denominator)
+  } else {
+    stop("Invalid input: Provide either a string 'numerator/denominator' or two numeric values.")
+  }
+  
+  # Create and validate the rational object
+  new("rational", numerator = numerator, denominator = denominator)
+}
+
+# Show method
+setMethod("show", "rational", function(object) {
+  cat(object@numerator, "/", object@denominator, "\n")
+})
+
+# Simplify method that returns a new rational object
+setGeneric("simplify", function(x) standardGeneric("simplify"))
+setMethod("simplify", "rational", function(x) {
+  divisor <- gcd(x@numerator, x@denominator)
+  rational(as.integer(x@numerator / divisor), as.integer(x@denominator / divisor))
+})
+
+# Quotient method (for decimal representation)
+setGeneric("quotient", function(x, digits = 8) standardGeneric("quotient"))
+setMethod("quotient", "rational", function(x, digits = 8) {
+  quotient_value <- x@numerator / x@denominator
+  print(round(quotient_value, digits))
+  invisible(quotient_value) # Return original quotient without rounding
+})
+
+# Overloading +, -, *, / operators to use LCM
+setMethod("+", c("rational", "rational"), function(e1, e2) {
+  common_denom <- lcm(e1@denominator, e2@denominator)
+  numerator <- (e1@numerator * (common_denom / e1@denominator)) +
+               (e2@numerator * (common_denom / e2@denominator))
+  simplify(rational(numerator, common_denom)) # Simplify the result before returning
+})
+
+setMethod("-", c("rational", "rational"), function(e1, e2) {
+  common_denom <- lcm(e1@denominator, e2@denominator)
+  numerator <- (e1@numerator * (common_denom / e1@denominator)) -
+               (e2@numerator * (common_denom / e2@denominator))
+  simplify(rational(numerator, common_denom)) # Simplify the result before returning
+})
+
+setMethod("*", c("rational", "rational"), function(e1, e2) {
+  simplify(rational(e1@numerator * e2@numerator, e1@denominator * e2@denominator)) # Simplify the result before returning
+})
+
+setMethod("/", c("rational", "rational"), function(e1, e2) {
+  simplify(rational(e1@numerator * e2@denominator, e1@denominator * e2@numerator)) # Simplify the result before returning
+})
+```
+
+## b
+
+```{r}
+#| error: true
+r1 <- rational(24, 6)
+r2 <- rational(7, 230)
+r3 <- rational(0, 4)
+r1
+r3
+r1 + r2
+r1 - r2
+r1 * r2
+r1 / r2
+r1 + r3
+r1 * r3
+r2 / r3
+quotient(r1)
+quotient(r2)
+quotient(r2, digits = 3)
+quotient(r2, digits = 3.14)
+quotient(r2, digits = "avocado")
+q2 <- quotient(r2, digits = 3)
+q2
+quotient(r3)
+simplify(r1)
+simplify(r2)
+simplify(r3)
+```
+
+## c
+
+```{r}
+# Valid input: two integers
+try(r1 <- rational(24, 6))  # Expected output: 24 / 6
+show(r1)
+
+# Valid input: string in form "numerator/denominator"
+try(r2 <- rational("7/230"))  # Expected output: 7 / 230
+show(r2)
+
+# Invalid input: zero denominator
+try(r3 <- rational(24, 0))  # Expected error: "Denominator cannot be zero."
+
+# Invalid input: non-integer numerator and denominator
+try(r4 <- rational(3.5, 4.2))  # Expected error: "Numerator and denominator must be integers."
+
+# Invalid input: malformed string
+try(r5 <- rational("24/"))  # Expected error: "Input string must be in the form 'numerator/denominator'."
+
+# Invalid input: incorrect data types
+try(r6 <- rational("text", "another text"))  # Expected error: "Invalid input"
+```
+
+# Problem 2
+
+## a
+
+```{r}
+# load the dataset
+df <-  read_csv("/Users/yining/Downloads/df_for_ml_improved_new_market.csv", show_col_types = FALSE)
+# Plot: Change in sales price over time by country (treated as genre)
+plot_price_by_country <- df %>%
+
+  # Select relevant columns and reshape country data to a longer format
+  select(year, price_usd, starts_with("Country")) %>%
+  pivot_longer(cols = starts_with("Country"), names_to = "Country", values_to = "Count") %>%
+  
+  # Filter to keep only rows where the country (genre) indicator is 1
+  filter(Count == 1) %>%
+  
+  # Group by year and country (treated as genre) and calculate average sales price in USD
+  group_by(year, Country) %>%
+  summarize(avg_price_usd = mean(price_usd, na.rm = TRUE)) %>%
+  
+  # Plot the change in sales price over time for each country
+  ggplot(aes(x = year, y = avg_price_usd, color = Country)) +
+  geom_line(size = 1) +
+  labs(
+    title = "Change in Sales Price Over Time by Country (Genre)",
+    x = "Year",
+    y = "Average Sales Price (USD)",
+    color = "Country (Genre)"
+  ) +
+  theme_minimal(base_size = 15) +
+  scale_color_viridis_d()
+
+# Display the plot
+print(plot_price_by_country)
+```
+
+## b
+
+```{r}
+# Prepare the data: Reshape and calculate average sales price per year per country
+processed_df <- df %>%
+  select(year, price_usd, starts_with("Country")) %>%
+  pivot_longer(cols = starts_with("Country"), names_to = "Country", values_to = "Count") %>%
+  filter(Count == 1) %>%
+  group_by(year, Country) %>%
+  summarize(avg_price_usd = mean(price_usd, na.rm = TRUE), .groups = "drop")
+
+# Create the interactive line plot using plotly
+fig <- plot_ly(
+    processed_df,
+    x = ~year,
+    y = ~avg_price_usd,
+    color = ~Country,
+    type = 'scatter',
+    mode = 'lines'
+) %>%
+  layout(
+    title = "Change in Sales Price Over Time by Country (Genre)",
+    xaxis = list(title = "Year"),
+    yaxis = list(title = "Average Sales Price (USD)"),
+    legend = list(title = list(text = "Country (Genre)"))
+  )
+
+# Display the interactive plot
+fig
+```
+
+# Problem 3
+
+```{r}
+# Load necessary libraries
+library(nycflights13)
+library(data.table)
+
+# Convert `flights` to a data.table for efficient processing
+flights_dt <- as.data.table(flights)
+airports_dt <- as.data.table(airports)
+
+# Calculate mean and median departure delay per airport
+departure_delays <- flights_dt[, .(
+  mean_departure_delay = mean(dep_delay, na.rm = TRUE),
+  median_departure_delay = median(dep_delay, na.rm = TRUE),
+  flight_count = .N
+), by = origin]
+
+# Exclude airports with fewer than 10 flights
+departure_delays <- departure_delays[flight_count >= 10]
+
+# Merge with `airports` data to get airport names
+departure_delays <- merge(departure_delays, airports_dt[, .(faa, name)], by.x = "origin", by.y = "faa")
+
+# Order by descending mean departure delay and select necessary columns
+departure_delays <- departure_delays[order(-mean_departure_delay), .(name, mean_departure_delay, median_departure_delay, flight_count)]
+
+# Convert to tibble for nice printing
+departure_delays_tbl <- as_tibble(departure_delays)
+print(departure_delays_tbl, n = Inf)
+
+# Calculate mean and median arrival delay per airport
+arrival_delays <- flights_dt[, .(
+  mean_arrival_delay = mean(arr_delay, na.rm = TRUE),
+  median_arrival_delay = median(arr_delay, na.rm = TRUE),
+  flight_count = .N
+), by = dest]
+
+# Exclude airports with fewer than 10 flights
+arrival_delays <- arrival_delays[flight_count >= 10]
+
+# Merge with `airports` data to get airport names
+arrival_delays <- merge(arrival_delays, airports_dt[, .(faa, name)], by.x = "dest", by.y = "faa")
+
+# Order by descending mean arrival delay and select necessary columns
+arrival_delays <- arrival_delays[order(-mean_arrival_delay), .(name, mean_arrival_delay, median_arrival_delay, flight_count)]
+
+# Convert to tibble for nice printing
+arrival_delays_tbl <- as_tibble(arrival_delays)
+print(arrival_delays_tbl, n = Inf)
+```
+
+```{r}
+# Calculate speed (MPH) for each flight and then find the aircraft model with the fastest average speed
+fastest_model <- flights_dt[!is.na(air_time) & air_time > 0, .(
+  avg_speed = mean(distance / (air_time / 60), na.rm = TRUE),
+  flight_count = .N
+), by = tailnum]
+
+# Get the aircraft with the fastest average speed
+fastest_model <- fastest_model[order(-avg_speed)][1]
+
+# Add model information by joining with the planes dataset
+fastest_model <- merge(fastest_model, as.data.table(planes)[, .(tailnum, model)], by = "tailnum")
+
+# Select relevant columns and convert to a tibble
+fastest_model_tbl <- fastest_model[, .(model, avg_speed, flight_count)]
+fastest_model_tbl <- as_tibble(fastest_model_tbl)
+print(fastest_model_tbl)
+```
